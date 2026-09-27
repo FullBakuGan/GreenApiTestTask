@@ -1,0 +1,80 @@
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-menu-background: var(--menu-background);
+  --color-menu-foreground: var(--menu-foreground);
+  --color-menu-muted: var(--menu-muted);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+}
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --menu-background: #070229;
+  --menu-foreground: #ffffff;
+  --menu-muted: #b7b3d4;
+  --background: #f8fbfd;
+  --foreground: #111b21;
+  --surface: #ffffff;
+  --muted: #7a8494;
+  --border: #e4e8ec;
+  --accent: #2f6cf6;
+  --accent-foreground: #ffffff;
+  --chat-background: #d6e3ef;
+  --chat-pattern: #ffffff;
+  --chat-pattern-opacity: 0.55;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --menu-background: #070229;
+  --menu-foreground: #ffffff;
+  --menu-muted: #b7b3d4;
+  --background: #042135;
+  --foreground: #e9edef;
+  --surface: #111b21;
+  --muted: #8696a0;
+  --border: #2a3942;
+  --accent: #4c82ff;
+  --accent-foreground: #0b141a;
+  --chat-background: #0e1621;
+  --chat-pattern: #ffffff;
+  --chat-pattern-opacity: 0.07;
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
+
+@layer components {
+  .chat-wallpaper {
+    position: relative;
+    isolation: isolate;
+    background-color: var(--chat-background);
+  }
+
+  .chat-wallpaper::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--chat-pattern);
+    opacity: var(--chat-pattern-opacity);
+    pointer-events: none;
+    -webkit-mask-image: url("./assets/chat-pattern.svg");
+    mask-image: url("./assets/chat-pattern.svg");
+    -webkit-mask-size: 420px 420px;
+    mask-size: 420px 420px;
+    -webkit-mask-repeat: repeat;
+    mask-repeat: repeat;
+  }
+}
