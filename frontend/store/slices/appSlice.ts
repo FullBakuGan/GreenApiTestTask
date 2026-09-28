@@ -10,36 +10,6 @@ export const sendMessageThunk = createAsyncThunk(
   },
 )
 
-let incomingWebhookReady: Promise<boolean> | null = null
-
-export const enableIncomingWebhookThunk = createAsyncThunk(
-  "app/enableIncomingWebhook",
-  async () => {
-    incomingWebhookReady ??= appService
-      .getSettings()
-      .then(async (res) => {
-        if (res.data?.incomingWebhook === "yes") return false
-        await appService.setSettings({ incomingWebhook: "yes" })
-        return true
-      })
-      .catch((error: unknown) => {
-        incomingWebhookReady = null
-        throw error
-      })
-
-    return incomingWebhookReady
-  },
-)
-
-export const messageAnswerThunk = createAsyncThunk("app/messageAnswerThunk", async () => {
-  const res = await appService.receiveNotification()
-  const notification = res.data
-  if (!notification?.receiptId) return null
-
-  await appService.deleteNotification(notification.receiptId)
-  return notification
-})
-
 const getDeviceType = (): TDeviceType => {
   if (typeof window === "undefined") {
     return "desktop";
@@ -91,6 +61,7 @@ const appSlice = createSlice({
   selectors: {
     selectConfig: (state) => state.config,
     selectDeviceType: (state) => state.deviceType,
+    selectLoading: (state) => state.loading,
   },
   extraReducers: (builder) => {
     builder
@@ -106,6 +77,6 @@ const appSlice = createSlice({
   },
 });
 
-export const {selectConfig, selectDeviceType} = appSlice.selectors;
+export const {selectConfig, selectDeviceType, selectLoading} = appSlice.selectors;
 export const {updateDeviceType, setDeviceType } = appSlice.actions;
 export default appSlice.reducer;

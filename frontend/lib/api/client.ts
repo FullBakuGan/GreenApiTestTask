@@ -1,17 +1,22 @@
 import axios from "axios"
-
-const apiUrl = String(import.meta.env["VITE_GREEN-API_API_URL"] ?? "").replace(/\/$/, "")
-const idInstance = String(import.meta.env.VITE_ID_INSTANCE ?? "")
-const apiTokenInstance = String(import.meta.env.VITE_API_TOKEN_INSTANCE ?? "")
+import { getGreenApiCredentials } from "@/lib/greenApiCredentials"
 
 export const apiClient = axios.create({
-  baseURL: apiUrl,
   timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
 })
 
+apiClient.interceptors.request.use((config) => {
+  const credentials = getGreenApiCredentials()
+  if (credentials) config.baseURL = credentials.apiUrl
+  return config
+})
+
 export function greenApiPath(method: string) {
+  const credentials = getGreenApiCredentials()
+  const idInstance = credentials?.idInstance ?? ""
+  const apiTokenInstance = credentials?.apiTokenInstance ?? ""
   return `/waInstance${idInstance}/${method}/${apiTokenInstance}`
 }

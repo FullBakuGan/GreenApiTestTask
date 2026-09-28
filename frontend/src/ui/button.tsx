@@ -11,6 +11,7 @@ type TButton = {
   bg?: ButtonBg
   onClick?: () => void
   disabled?: boolean
+  loading?: boolean
   className?: string
   children?: ReactNode
   role?: ButtonProps["role"]
@@ -33,6 +34,7 @@ export const CustomButton: FC<TButton> = ({
   bg = "primary",
   onClick,
   disabled,
+  loading,
   className,
   children,
   role,
@@ -49,6 +51,7 @@ export const CustomButton: FC<TButton> = ({
       autoInsertSpace={false}
       onClick={onClick}
       disabled={disabled}
+      loading={loading}
       className={className}
       role={role}
       aria-label={ariaLabel}

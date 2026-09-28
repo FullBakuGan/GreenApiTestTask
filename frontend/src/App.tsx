@@ -1,10 +1,20 @@
 import { Input } from "antd"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Chats from "./components/chats/Chats"
 import ChatInfo from "./components/chatInfo/chatInfo"
 import UserInfo from "./components/userInfo/UserInfo"
 import { CustomButton } from "./ui/button"
 import { useToast } from "./hooks/use-toast"
+import { useIncomingNotifications } from "./hooks/useIncomingNotifications"
+import { appendIncoming, loadChats, saveChats } from "@/lib/chatStorage"
+import {
+  getGreenApiCredentials,
+  saveGreenApiCredentials,
+  type GreenApiCredentials,
+} from "@/lib/greenApiCredentials"
+import { resetInstanceSettings } from "@/services/appServise"
+import UserInfoModal from "./modals/UserInfoModal"
+import type { ChatMessage, StoredChats } from "@/types/chat"
 
 function normalizePhone(value: string) {
   const digits = value.replace(/\D/g, "")
@@ -15,12 +25,33 @@ function normalizePhone(value: string) {
   return withCountry
 }
 
+const EMPTY_MESSAGES: ChatMessage[] = []
+
 function App() {
   const toast = useToast()
 
   const [phone, setPhone] = useState("")
-  const [chats, setChats] = useState<string[]>([])
-  const [activeChat, setActiveChat] = useState<string | null>(null)
+  const [credentials, setCredentials] = useState<GreenApiCredentials | null>(
+    getGreenApiCredentials,
+  )
+  const [storage, setStorage] = useState<StoredChats>(loadChats)
+  const activeChat = storage.activePhone
+  const messages = activeChat
+    ? (storage.messagesByPhone[activeChat] ?? EMPTY_MESSAGES)
+    : EMPTY_MESSAGES
+
+  useEffect(() => {
+    saveChats(storage)
+  }, [storage])
+
+  useIncomingNotifications(Boolean(credentials), (incoming) => {
+    setStorage((current) => appendIncoming(current, incoming))
+  })
+
+  const saveCredentials = (next: GreenApiCredentials) => {
+    resetInstanceSettings()
+    setCredentials(saveGreenApiCredentials(next))
+  }
 
   const createChat = () => {
     if (!phone.trim()) {
@@ -34,18 +65,39 @@ function App() {
       return
     }
 
-    setChats((current) =>
-      current.includes(normalized) ? current : [...current, normalized],
-    )
-    setActiveChat(normalized)
+    setStorage((current) => ({
+      ...current,
+      phones: current.phones.includes(normalized)
+        ? current.phones
+        : [...current.phones, normalized],
+      activePhone: normalized,
+    }))
     setPhone("")
+  }
+
+  const updateMessages = (
+    chatPhone: string,
+    updater: (current: ChatMessage[]) => ChatMessage[],
+  ) => {
+    setStorage((current) => {
+      const previous = current.messagesByPhone[chatPhone] ?? []
+      const next = updater(previous)
+      if (next === previous) return current
+      return {
+        ...current,
+        messagesByPhone: {
+          ...current.messagesByPhone,
+          [chatPhone]: next,
+        },
+      }
+    })
   }
 
   return (
     <div className="flex h-screen justify-center bg-background">
       <div className="flex h-full w-full max-w-[1280px] overflow-hidden border-x border-border bg-surface">
         <aside className="flex h-full w-[360px] shrink-0 flex-col border-r border-border">
-          <UserInfo />
+          {credentials ? <UserInfo credentials={credentials} /> : null}
 
           <div className="flex items-center gap-2 px-4 py-3">
             <Input
@@ -63,11 +115,22 @@ function App() {
             />
           </div>
 
-          <Chats chats={chats} activeChat={activeChat} onOpen={setActiveChat} />
+          <Chats
+            chats={storage.phones}
+            activeChat={activeChat}
+            onOpen={(nextPhone) =>
+              setStorage((current) => ({ ...current, activePhone: nextPhone }))
+            }
+          />
         </aside>
 
-        <ChatInfo phone={activeChat} />
+        <ChatInfo
+          phone={activeChat}
+          messages={messages}
+          onUpdateMessages={updateMessages}
+        />
       </div>
+      <UserInfoModal open={!credentials} onSave={saveCredentials} />
     </div>
   )
 }

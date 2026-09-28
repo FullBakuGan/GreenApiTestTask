@@ -1,146 +1,137 @@
 import { Input } from "antd"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import CustomButton from "../../ui/button"
 import { useToast } from "../../hooks/use-toast"
-import {
-  enableIncomingWebhookThunk,
-  messageAnswerThunk,
-  sendMessageThunk,
-} from "@/store/slices/appSlice"
+import { selectLoading, sendMessageThunk } from "@/store/slices/appSlice"
 import { useAppDispatch } from "@/store"
-import type { IncomingNotification } from "@/services/appServise"
+import type { ChatMessage } from "@/types/chat"
+import { useSelector } from "react-redux"
 
 type ChatInfoProps = {
   phone: string | null
+  messages: ChatMessage[]
+  onUpdateMessages: (
+    phone: string,
+    updater: (current: ChatMessage[]) => ChatMessage[],
+  ) => void
 }
 
-type ChatMessage = {
-  id: string
-  text: string
-}
-
-function sameChat(chatId: string, phone: string) {
-  const digits = chatId.replace(/\D/g, "")
-  if (!digits) return false
-  return digits === phone || digits.endsWith(phone) || phone.endsWith(digits)
-}
-
-function incomingText(notification: IncomingNotification, phone: string) {
-  const data = notification.body
-  if (data?.typeWebhook !== "incomingMessageReceived") return null
-
-  const text =
-    data.messageData?.textMessageData?.textMessage ??
-    data.messageData?.extendedTextMessageData?.text
-  if (!text) return null
-
-  const chatId = data.senderData?.chatId ?? ""
-  const sender = data.senderData?.sender ?? ""
-  return sameChat(chatId, phone) || sameChat(sender, phone) ? text : null
-}
-
-const ChatInfo = ({ phone }: ChatInfoProps) => {
+const ChatInfo = ({ phone, messages, onUpdateMessages }: ChatInfoProps) => {
   const toast = useToast()
   const dispatch = useAppDispatch()
   const [message, setMessage] = useState("")
-  const [answers, setAnswers] = useState<ChatMessage[]>([])
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const isLoading = useSelector(selectLoading)
 
   useEffect(() => {
-    setAnswers([])
-  }, [phone])
+    const list = listRef.current
+    if (!list) return
+    list.scrollTo({ top: list.scrollHeight, behavior: "smooth" })
+  }, [messages])
 
-  useEffect(() => {
-    if (!phone) return
-
-    let active = true
-
-    const waitForAnswer = async () => {
-      try {
-        const turnedOn = await dispatch(enableIncomingWebhookThunk()).unwrap()
-        if (active && turnedOn) {
-          toast.info(
-            "Приём входящих был выключен, я его включил. Напишите ответ в WhatsApp ещё раз: настройка применяется до 5 минут",
-          )
-        }
-      } catch {
-        if (active) toast.error("Не удалось включить приём входящих сообщений")
-      }
-
-      if (!active) return
-      while (active) {
-        const started = Date.now()
-        let received = false
-
-        try {
-          const notification = await dispatch(messageAnswerThunk()).unwrap()
-          received = Boolean(notification)
-
-          if (active && notification) {
-            const text = incomingText(notification, phone)
-            if (text) {
-              setAnswers((current) => {
-                const id = String(notification.receiptId)
-                if (current.some((item) => item.id === id)) return current
-                return [...current, { id, text }]
-              })
-            }
-          }
-        } catch {
-          received = false
-        }
-
-        if (!active) return
-        if (received) continue
-
-        const pause = Math.max(0, 5000 - (Date.now() - started))
-        if (pause > 0) await new Promise((resolve) => setTimeout(resolve, pause))
-      }
-    }
-
-    waitForAnswer()
-    return () => {
-      active = false
-    }
-  }, [dispatch, phone])
-
-  const sendMessage = () => {
-    if (!phone) return
-    if (message.length === 0) {
+  const sendMessage = async () => {
+    if (!phone || isLoading) return
+    const text = message.trim()
+    if (text.length === 0) {
       toast.error("Сначала введите сообщение")
       return
     }
-    dispatch(sendMessageThunk({ phone, message }))
+
+    const localId = `out-${crypto.randomUUID()}`
+    onUpdateMessages(phone, (current) => [
+      ...current,
+      { id: localId, text, direction: "out", status: "sending" },
+    ])
+    setMessage("")
+
+    try {
+      await dispatch(sendMessageThunk({ phone, message: text })).unwrap()
+      onUpdateMessages(phone, (current) =>
+        current.map((item) =>
+          item.id === localId ? { ...item, status: "sent" } : item,
+        ),
+      )
+    } catch {
+      onUpdateMessages(phone, (current) =>
+        current.map((item) =>
+          item.id === localId ? { ...item, status: "error" } : item,
+        ),
+      )
+      toast.error("Не удалось отправить сообщение")
+    }
   }
 
   return (
-    <section className="chat-wallpaper flex min-w-0 flex-1 flex-col">
+    <section className='chat-wallpaper flex min-w-0 flex-1 flex-col'>
       {phone ? (
-        <header className="border-b border-border bg-surface px-4 py-3 font-medium">
+        <header className='border-b border-border bg-surface px-4 py-3 font-medium'>
           {phone}
         </header>
       ) : null}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4">
+      <div
+        ref={listRef}
+        className='flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4'
+      >
         {!phone ? (
-          <p className="m-auto text-center text-muted">Выберите чат, чтобы начать общение</p>
-        ) : answers.length === 0 ? (
-          <p className="m-auto text-center text-muted">Напишите первое сообщение</p>
+          <p className='m-auto text-center text-muted'>
+            Выберите чат, чтобы начать общение
+          </p>
+        ) : messages.length === 0 ? (
+          <p className='m-auto text-center text-muted'>
+            Напишите первое сообщение
+          </p>
         ) : (
-          answers.map((item) => (
-            <p key={item.id} className="max-w-[70%] rounded-2xl bg-surface px-3 py-2">
-              {item.text}
-            </p>
-          ))
+          <div className='mt-auto flex flex-col gap-2'>
+            {messages.map((item) => {
+              const outgoing = item.direction === "out"
+              return (
+                <p
+                  key={item.id}
+                  className={`message-bubble max-w-[70%] rounded-2xl px-3 py-2 break-words shadow-sm ${
+                    outgoing
+                      ? "message-bubble-out self-end rounded-br-md bg-accent text-accent-foreground"
+                      : "self-start rounded-bl-md bg-surface"
+                  } ${item.status === "sending" ? "opacity-80" : ""}`}
+                >
+                  {item.text}
+                  {outgoing ? (
+                    <span className='message-status' aria-hidden>
+                      {item.status === "sending" ? (
+                        <span className='send-dots'>
+                          <span />
+                          <span />
+                          <span />
+                        </span>
+                      ) : item.status === "error" ? (
+                        <span className='text-xs'>!</span>
+                      ) : (
+                        <span className='message-status-sent text-xs'>✓</span>
+                      )}
+                    </span>
+                  ) : null}
+                </p>
+              )
+            })}
+          </div>
         )}
       </div>
       {phone ? (
-        <div className="flex items-center gap-2 border-t border-border bg-surface px-4 py-3">
+        <div className='flex items-center gap-2 border-t border-border bg-surface px-4 py-3'>
           <Input
-            placeholder="Сообщение"
-            className="min-w-0 flex-1"
+            placeholder='Сообщение'
+            className='min-w-0 flex-1'
             value={message}
             onChange={(text) => setMessage(text.target.value)}
+            onPressEnter={sendMessage}
           />
-          <CustomButton text="Отправить" bg="primary" onClick={sendMessage} />
+          <CustomButton
+            text='Отправить'
+            bg='primary'
+            loading={isLoading}
+            disabled={isLoading}
+            onClick={sendMessage}
+          />
         </div>
       ) : null}
     </section>
